@@ -1,0 +1,9 @@
+{
+  "skills": [
+    {
+      "name": "autopilot",
+      "description": "에러 자동 분석 및 GitHub 이슈 생성",
+      "path": "skills/autopilot.md"
+    }
+  ]
+}

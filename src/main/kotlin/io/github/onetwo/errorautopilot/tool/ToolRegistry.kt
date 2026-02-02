@@ -7,30 +7,52 @@ import io.github.onetwo.errorautopilot.formatter.TraceFormatter
 import io.github.onetwo.errorautopilot.model.FetchErrorsOptions
 import io.github.onetwo.errorautopilot.model.Severity
 import io.github.onetwo.errorautopilot.template.TemplateManager
+import io.github.oshai.kotlinlogging.KotlinLogging
 import io.modelcontextprotocol.kotlin.sdk.server.Server
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
-import java.io.BufferedReader
-import java.io.InputStreamReader
+
+private val logger = KotlinLogging.logger {}
 
 /**
- * MCP 도구 등록 담당 - 모든 도구를 서버에 등록
+ * MCP 도구 등록을 담당하는 객체.
+ *
+ * Error Autopilot MCP 서버에서 제공하는 모든 도구(14개)를 MCP 서버에 등록합니다.
+ * 도구는 다음 카테고리로 분류됩니다:
+ * - **Loki 도구** (6개): 에러 로그 조회, 쿼리, 연결 테스트 등
+ * - **Tempo 도구** (3개): 트레이스 조회, 검색, 연결 테스트
+ * - **Template 도구** (5개): 이슈 템플릿 관리
+ *
+ * @see [MCP SDK Documentation](https://modelcontextprotocol.io/)
  */
 object ToolRegistry {
 
+    /**
+     * 모든 도구를 MCP 서버에 등록합니다.
+     *
+     * @param server MCP 서버 인스턴스
+     * @param loki Loki 어댑터
+     * @param tempo Tempo 어댑터 (null이면 Tempo 도구는 비활성화)
+     * @param templateManager 템플릿 매니저
+     */
     fun registerAllTools(
         server: Server,
         loki: LokiAdapter,
         tempo: TempoAdapter?,
         templateManager: TemplateManager
     ) {
+        logger.info { "Registering MCP tools..." }
         registerLokiTools(server, loki)
         registerTempoTools(server, tempo)
         registerTemplateTools(server, templateManager)
+        logger.info { "All MCP tools registered successfully" }
     }
 
-    // ==================== Loki Tools ====================
+    // ==================== Loki Tools (6개) ====================
 
+    /**
+     * Loki 관련 도구를 등록합니다.
+     */
     private fun registerLokiTools(server: Server, loki: LokiAdapter) {
         // 1. fetch_errors
         server.addTool(
@@ -38,13 +60,14 @@ object ToolRegistry {
             description = "Loki에서 에러 로그를 가져옵니다. severity, service, namespace로 필터링 가능합니다."
         ) { request ->
             val args = request.arguments ?: emptyMap()
-            val sinceMinutes = (args["since_minutes"] as? Number)?.toInt() ?: 60
+            val sinceMinutes = (args["since_minutes"] as? Number)?.toInt()
+                ?: FetchErrorsOptions.DEFAULT_SINCE_MINUTES
             val severityList = (args["severity"] as? List<*>)?.mapNotNull { s ->
                 Severity.fromString(s.toString())
-            } ?: listOf(Severity.ERROR, Severity.CRITICAL)
+            } ?: FetchErrorsOptions.DEFAULT_SEVERITY
             val service = args["service"] as? String
             val namespace = args["namespace"] as? String
-            val limit = (args["limit"] as? Number)?.toInt() ?: 100
+            val limit = (args["limit"] as? Number)?.toInt() ?: FetchErrorsOptions.DEFAULT_LIMIT
 
             val options = FetchErrorsOptions(sinceMinutes, severityList, service, namespace, limit)
             val errors = loki.fetchErrors(options)
@@ -64,9 +87,11 @@ object ToolRegistry {
             description = "커스텀 LogQL 쿼리로 Loki 로그를 조회합니다."
         ) { request ->
             val args = request.arguments ?: emptyMap()
-            val query = args["query"] as? String ?: throw IllegalArgumentException("query 필수")
-            val sinceMinutes = (args["since_minutes"] as? Number)?.toInt() ?: 60
-            val limit = (args["limit"] as? Number)?.toInt() ?: 100
+            val query = args["query"] as? String
+                ?: throw IllegalArgumentException("query 파라미터는 필수입니다")
+            val sinceMinutes = (args["since_minutes"] as? Number)?.toInt()
+                ?: FetchErrorsOptions.DEFAULT_SINCE_MINUTES
+            val limit = (args["limit"] as? Number)?.toInt() ?: FetchErrorsOptions.DEFAULT_LIMIT
 
             val errors = loki.query(query, sinceMinutes, limit)
 
@@ -101,6 +126,7 @@ object ToolRegistry {
                     loki.getLabelValues("service.name")
                 }
             } catch (e: Exception) {
+                logger.warn(e) { "Failed to get service list" }
                 emptyList()
             }
 
@@ -118,7 +144,9 @@ object ToolRegistry {
             description = "Loki에서 사용 가능한 모든 레이블 목록을 조회합니다."
         ) { _ ->
             val labels = loki.getLabels()
-            CallToolResult(content = listOf(TextContent("## 사용 가능한 레이블\n\n${labels.joinToString("\n") { "- $it" }}")))
+            CallToolResult(content = listOf(TextContent(
+                "## 사용 가능한 레이블\n\n${labels.joinToString("\n") { "- $it" }}"
+            )))
         }
 
         // 6. get_error_summary
@@ -127,34 +155,43 @@ object ToolRegistry {
             description = "에러 로그의 요약 정보를 반환합니다. 서비스별, 심각도별 개수를 포함합니다."
         ) { request ->
             val args = request.arguments ?: emptyMap()
-            val sinceMinutes = (args["since_minutes"] as? Number)?.toInt() ?: 60
+            val sinceMinutes = (args["since_minutes"] as? Number)?.toInt()
+                ?: FetchErrorsOptions.DEFAULT_SINCE_MINUTES
             val errors = loki.fetchErrors(FetchErrorsOptions(
                 sinceMinutes = sinceMinutes,
                 severity = listOf(Severity.CRITICAL, Severity.ERROR, Severity.WARNING),
-                limit = 1000
+                limit = FetchErrorsOptions.MAX_LIMIT / 10  // 요약용으로 1000개 제한
             ))
             val summary = ErrorFormatter.generateSummary(errors)
             CallToolResult(content = listOf(TextContent(summary)))
         }
+
+        logger.debug { "Loki tools registered (6 tools)" }
     }
 
-    // ==================== Tempo Tools ====================
+    // ==================== Tempo Tools (3개) ====================
 
+    /**
+     * Tempo 관련 도구를 등록합니다.
+     */
     private fun registerTempoTools(server: Server, tempo: TempoAdapter?) {
+        val tempoNotConfiguredResult = CallToolResult(
+            content = listOf(TextContent("Tempo가 설정되지 않았습니다. TEMPO_URL 환경변수를 확인하세요.")),
+            isError = true
+        )
+
         // 7. get_trace
         server.addTool(
             name = "get_trace",
             description = "trace_id로 분산 트레이스를 조회합니다. 에러 로그에서 발견된 trace_id를 사용하여 전체 요청 흐름을 확인할 수 있습니다."
         ) { request ->
             if (tempo == null) {
-                return@addTool CallToolResult(
-                    content = listOf(TextContent("Tempo가 설정되지 않았습니다. TEMPO_URL 환경변수를 확인하세요.")),
-                    isError = true
-                )
+                return@addTool tempoNotConfiguredResult
             }
 
             val args = request.arguments ?: emptyMap()
-            val traceId = args["trace_id"] as? String ?: throw IllegalArgumentException("trace_id 필수")
+            val traceId = args["trace_id"] as? String
+                ?: throw IllegalArgumentException("trace_id 파라미터는 필수입니다")
             val trace = tempo.getTrace(traceId)
 
             if (trace == null) {
@@ -170,10 +207,7 @@ object ToolRegistry {
             description = "서비스, 시간 범위 등으로 트레이스를 검색합니다. 느린 요청이나 에러가 발생한 트레이스를 찾을 수 있습니다."
         ) { request ->
             if (tempo == null) {
-                return@addTool CallToolResult(
-                    content = listOf(TextContent("Tempo가 설정되지 않았습니다. TEMPO_URL 환경변수를 확인하세요.")),
-                    isError = true
-                )
+                return@addTool tempoNotConfiguredResult
             }
 
             val args = request.arguments ?: emptyMap()
@@ -193,10 +227,7 @@ object ToolRegistry {
             description = "Tempo 서버 연결을 테스트합니다."
         ) { _ ->
             if (tempo == null) {
-                return@addTool CallToolResult(
-                    content = listOf(TextContent("❌ Tempo가 설정되지 않았습니다. TEMPO_URL 환경변수를 확인하세요.")),
-                    isError = true
-                )
+                return@addTool tempoNotConfiguredResult
             }
 
             val result = tempo.testConnection()
@@ -206,10 +237,15 @@ object ToolRegistry {
             )
             CallToolResult(content = listOf(TextContent(text)))
         }
+
+        logger.debug { "Tempo tools registered (3 tools)" }
     }
 
-    // ==================== Template Tools ====================
+    // ==================== Template Tools (5개) ====================
 
+    /**
+     * 템플릿 관련 도구를 등록합니다.
+     */
     private fun registerTemplateTools(server: Server, templateManager: TemplateManager) {
         // 10. list_issue_templates
         server.addTool(
@@ -235,7 +271,8 @@ object ToolRegistry {
             description = "특정 이슈 템플릿의 상세 내용을 조회합니다."
         ) { request ->
             val args = request.arguments ?: emptyMap()
-            val templateId = args["template_id"] as? String ?: throw IllegalArgumentException("template_id 필수")
+            val templateId = args["template_id"] as? String
+                ?: throw IllegalArgumentException("template_id 파라미터는 필수입니다")
             val template = templateManager.getTemplate(templateId)
 
             if (template == null) {
@@ -265,9 +302,12 @@ object ToolRegistry {
             description = "GitHub 리포지토리의 이슈 템플릿을 가져와 등록합니다."
         ) { request ->
             val args = request.arguments ?: emptyMap()
-            val repo = args["repo"] as? String ?: throw IllegalArgumentException("repo 필수")
-            val templateFile = args["template_file"] as? String ?: throw IllegalArgumentException("template_file 필수")
-            val templateId = args["template_id"] as? String ?: throw IllegalArgumentException("template_id 필수")
+            val repo = args["repo"] as? String
+                ?: throw IllegalArgumentException("repo 파라미터는 필수입니다")
+            val templateFile = args["template_file"] as? String
+                ?: throw IllegalArgumentException("template_file 파라미터는 필수입니다")
+            val templateId = args["template_id"] as? String
+                ?: throw IllegalArgumentException("template_id 파라미터는 필수입니다")
 
             try {
                 // GitHub CLI로 템플릿 가져오기
@@ -299,6 +339,7 @@ object ToolRegistry {
                     )))
                 }
             } catch (e: Exception) {
+                logger.error(e) { "Failed to import GitHub template" }
                 CallToolResult(
                     content = listOf(TextContent("❌ GitHub에서 템플릿을 가져오는데 실패했습니다: ${e.message}")),
                     isError = true
@@ -312,7 +353,8 @@ object ToolRegistry {
             description = "기본 이슈 템플릿을 설정합니다."
         ) { request ->
             val args = request.arguments ?: emptyMap()
-            val templateId = args["template_id"] as? String ?: throw IllegalArgumentException("template_id 필수")
+            val templateId = args["template_id"] as? String
+                ?: throw IllegalArgumentException("template_id 파라미터는 필수입니다")
             val success = templateManager.setDefaultTemplate(templateId)
 
             if (success) {
@@ -350,5 +392,7 @@ object ToolRegistry {
             }
             CallToolResult(content = listOf(TextContent(text)))
         }
+
+        logger.debug { "Template tools registered (5 tools)" }
     }
 }
