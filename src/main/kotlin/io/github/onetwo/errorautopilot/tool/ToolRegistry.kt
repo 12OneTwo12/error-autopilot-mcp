@@ -1,9 +1,11 @@
 package io.github.onetwo.errorautopilot.tool
 
+import io.github.onetwo.errorautopilot.Adapters
 import io.github.onetwo.errorautopilot.adapter.LokiAdapter
 import io.github.onetwo.errorautopilot.adapter.TempoAdapter
 import io.github.onetwo.errorautopilot.formatter.ErrorFormatter
 import io.github.onetwo.errorautopilot.formatter.TraceFormatter
+import io.github.onetwo.errorautopilot.model.Environment
 import io.github.onetwo.errorautopilot.model.FetchErrorsOptions
 import io.github.onetwo.errorautopilot.model.Severity
 import io.github.onetwo.errorautopilot.template.TemplateManager
@@ -18,6 +20,8 @@ private val logger = KotlinLogging.logger {}
  * MCP 도구 등록을 담당하는 객체.
  *
  * Error Autopilot MCP 서버에서 제공하는 모든 도구(14개)를 MCP 서버에 등록합니다.
+ * 모든 Loki/Tempo 도구는 `env` 파라미터를 지원합니다 (dev/prod, 기본: dev)
+ *
  * 도구는 다음 카테고리로 분류됩니다:
  * - **Loki 도구** (6개): 에러 로그 조회, 쿼리, 연결 테스트 등
  * - **Tempo 도구** (3개): 트레이스 조회, 검색, 연결 테스트
@@ -31,35 +35,54 @@ object ToolRegistry {
      * 모든 도구를 MCP 서버에 등록합니다.
      *
      * @param server MCP 서버 인스턴스
-     * @param loki Loki 어댑터
-     * @param tempo Tempo 어댑터 (null이면 Tempo 도구는 비활성화)
+     * @param adapters 환경별 어댑터 맵
      * @param templateManager 템플릿 매니저
      */
     fun registerAllTools(
         server: Server,
-        loki: LokiAdapter,
-        tempo: TempoAdapter?,
+        adapters: Map<Environment, Adapters>,
         templateManager: TemplateManager
     ) {
         logger.info { "Registering MCP tools..." }
-        registerLokiTools(server, loki)
-        registerTempoTools(server, tempo)
+        registerLokiTools(server, adapters)
+        registerTempoTools(server, adapters)
         registerTemplateTools(server, templateManager)
         logger.info { "All MCP tools registered successfully" }
     }
+
+    /**
+     * 환경 파라미터를 파싱합니다.
+     */
+    private fun parseEnvironment(args: Map<String, Any?>): Environment =
+        Environment.fromString(args["env"] as? String)
+
+    /**
+     * 환경별 Loki 어댑터를 반환합니다.
+     */
+    private fun getLoki(adapters: Map<Environment, Adapters>, env: Environment): LokiAdapter =
+        adapters[env]?.loki ?: throw IllegalStateException("Loki adapter not found for $env")
+
+    /**
+     * 환경별 Tempo 어댑터를 반환합니다.
+     */
+    private fun getTempo(adapters: Map<Environment, Adapters>, env: Environment): TempoAdapter? =
+        adapters[env]?.tempo
 
     // ==================== Loki Tools (6개) ====================
 
     /**
      * Loki 관련 도구를 등록합니다.
      */
-    private fun registerLokiTools(server: Server, loki: LokiAdapter) {
+    private fun registerLokiTools(server: Server, adapters: Map<Environment, Adapters>) {
         // 1. fetch_errors
         server.addTool(
             name = "fetch_errors",
             description = "Loki에서 에러 로그를 가져옵니다. severity, service, namespace로 필터링 가능합니다."
         ) { request ->
             val args = request.arguments ?: emptyMap()
+            val env = parseEnvironment(args)
+            val loki = getLoki(adapters, env)
+
             val sinceMinutes = (args["since_minutes"] as? Number)?.toInt()
                 ?: FetchErrorsOptions.DEFAULT_SINCE_MINUTES
             val severityList = (args["severity"] as? List<*>)?.mapNotNull { s ->
@@ -73,11 +96,11 @@ object ToolRegistry {
             val errors = loki.fetchErrors(options)
 
             if (errors.isEmpty()) {
-                CallToolResult(content = listOf(TextContent("최근 ${sinceMinutes}분 이내에 발견된 에러가 없습니다.")))
+                CallToolResult(content = listOf(TextContent("${env.emoji} 환경: 최근 ${sinceMinutes}분 이내에 발견된 에러가 없습니다.")))
             } else {
                 val formatted = ErrorFormatter.format(errors)
                 val summary = ErrorFormatter.generateSummary(errors)
-                CallToolResult(content = listOf(TextContent("$summary\n\n---\n\n## 상세 내역\n\n$formatted")))
+                CallToolResult(content = listOf(TextContent("${env.emoji} 환경\n\n$summary\n\n---\n\n## 상세 내역\n\n$formatted")))
             }
         }
 
@@ -87,6 +110,9 @@ object ToolRegistry {
             description = "커스텀 LogQL 쿼리로 Loki 로그를 조회합니다."
         ) { request ->
             val args = request.arguments ?: emptyMap()
+            val env = parseEnvironment(args)
+            val loki = getLoki(adapters, env)
+
             val query = args["query"] as? String
                 ?: throw IllegalArgumentException("query 파라미터는 필수입니다")
             val sinceMinutes = (args["since_minutes"] as? Number)?.toInt()
@@ -96,10 +122,10 @@ object ToolRegistry {
             val errors = loki.query(query, sinceMinutes, limit)
 
             if (errors.isEmpty()) {
-                CallToolResult(content = listOf(TextContent("쿼리 결과가 없습니다.\n쿼리: $query")))
+                CallToolResult(content = listOf(TextContent("${env.emoji} 환경: 쿼리 결과가 없습니다.\n쿼리: $query")))
             } else {
                 val formatted = ErrorFormatter.format(errors)
-                CallToolResult(content = listOf(TextContent("## 쿼리 결과 (${errors.size}개)\n\n쿼리: `$query`\n\n$formatted")))
+                CallToolResult(content = listOf(TextContent("${env.emoji} 환경\n\n## 쿼리 결과 (${errors.size}개)\n\n쿼리: `$query`\n\n$formatted")))
             }
         }
 
@@ -107,11 +133,15 @@ object ToolRegistry {
         server.addTool(
             name = "test_connection",
             description = "Loki 서버 연결을 테스트합니다."
-        ) { _ ->
+        ) { request ->
+            val args = request.arguments ?: emptyMap()
+            val env = parseEnvironment(args)
+            val loki = getLoki(adapters, env)
+
             val result = loki.testConnection()
             val text = result.fold(
-                onSuccess = { "✅ $it" },
-                onFailure = { "❌ Loki 연결 실패: ${it.message}" }
+                onSuccess = { "${env.emoji} 환경: ✅ $it" },
+                onFailure = { "${env.emoji} 환경: ❌ Loki 연결 실패: ${it.message}" }
             )
             CallToolResult(content = listOf(TextContent(text)))
         }
@@ -120,7 +150,11 @@ object ToolRegistry {
         server.addTool(
             name = "list_services",
             description = "Loki에서 사용 가능한 서비스 목록을 조회합니다."
-        ) { _ ->
+        ) { request ->
+            val args = request.arguments ?: emptyMap()
+            val env = parseEnvironment(args)
+            val loki = getLoki(adapters, env)
+
             val services = try {
                 loki.getLabelValues("service_name").ifEmpty {
                     loki.getLabelValues("service.name")
@@ -131,9 +165,9 @@ object ToolRegistry {
             }
 
             val text = if (services.isNotEmpty()) {
-                "## 사용 가능한 서비스\n\n${services.joinToString("\n") { "- $it" }}"
+                "${env.emoji} 환경\n\n## 사용 가능한 서비스\n\n${services.joinToString("\n") { "- $it" }}"
             } else {
-                "등록된 서비스가 없습니다."
+                "${env.emoji} 환경: 등록된 서비스가 없습니다."
             }
             CallToolResult(content = listOf(TextContent(text)))
         }
@@ -142,10 +176,14 @@ object ToolRegistry {
         server.addTool(
             name = "list_labels",
             description = "Loki에서 사용 가능한 모든 레이블 목록을 조회합니다."
-        ) { _ ->
+        ) { request ->
+            val args = request.arguments ?: emptyMap()
+            val env = parseEnvironment(args)
+            val loki = getLoki(adapters, env)
+
             val labels = loki.getLabels()
             CallToolResult(content = listOf(TextContent(
-                "## 사용 가능한 레이블\n\n${labels.joinToString("\n") { "- $it" }}"
+                "${env.emoji} 환경\n\n## 사용 가능한 레이블\n\n${labels.joinToString("\n") { "- $it" }}"
             )))
         }
 
@@ -155,6 +193,9 @@ object ToolRegistry {
             description = "에러 로그의 요약 정보를 반환합니다. 서비스별, 심각도별 개수를 포함합니다."
         ) { request ->
             val args = request.arguments ?: emptyMap()
+            val env = parseEnvironment(args)
+            val loki = getLoki(adapters, env)
+
             val sinceMinutes = (args["since_minutes"] as? Number)?.toInt()
                 ?: FetchErrorsOptions.DEFAULT_SINCE_MINUTES
             val errors = loki.fetchErrors(FetchErrorsOptions(
@@ -163,7 +204,7 @@ object ToolRegistry {
                 limit = FetchErrorsOptions.MAX_LIMIT / 10  // 요약용으로 1000개 제한
             ))
             val summary = ErrorFormatter.generateSummary(errors)
-            CallToolResult(content = listOf(TextContent(summary)))
+            CallToolResult(content = listOf(TextContent("${env.emoji} 환경\n\n$summary")))
         }
 
         logger.debug { "Loki tools registered (6 tools)" }
@@ -174,9 +215,9 @@ object ToolRegistry {
     /**
      * Tempo 관련 도구를 등록합니다.
      */
-    private fun registerTempoTools(server: Server, tempo: TempoAdapter?) {
-        val tempoNotConfiguredResult = CallToolResult(
-            content = listOf(TextContent("Tempo가 설정되지 않았습니다. TEMPO_URL 환경변수를 확인하세요.")),
+    private fun registerTempoTools(server: Server, adapters: Map<Environment, Adapters>) {
+        fun tempoNotConfiguredResult(env: Environment) = CallToolResult(
+            content = listOf(TextContent("${env.emoji} 환경: Tempo가 설정되지 않았습니다. TEMPO_URL_${env.name} 환경변수를 확인하세요.")),
             isError = true
         )
 
@@ -185,19 +226,22 @@ object ToolRegistry {
             name = "get_trace",
             description = "trace_id로 분산 트레이스를 조회합니다. 에러 로그에서 발견된 trace_id를 사용하여 전체 요청 흐름을 확인할 수 있습니다."
         ) { request ->
+            val args = request.arguments ?: emptyMap()
+            val env = parseEnvironment(args)
+            val tempo = getTempo(adapters, env)
+
             if (tempo == null) {
-                return@addTool tempoNotConfiguredResult
+                return@addTool tempoNotConfiguredResult(env)
             }
 
-            val args = request.arguments ?: emptyMap()
             val traceId = args["trace_id"] as? String
                 ?: throw IllegalArgumentException("trace_id 파라미터는 필수입니다")
             val trace = tempo.getTrace(traceId)
 
             if (trace == null) {
-                CallToolResult(content = listOf(TextContent("트레이스를 찾을 수 없습니다: $traceId")))
+                CallToolResult(content = listOf(TextContent("${env.emoji} 환경: 트레이스를 찾을 수 없습니다: $traceId")))
             } else {
-                CallToolResult(content = listOf(TextContent(TraceFormatter.format(trace))))
+                CallToolResult(content = listOf(TextContent("${env.emoji} 환경\n\n${TraceFormatter.format(trace)}")))
             }
         }
 
@@ -206,11 +250,14 @@ object ToolRegistry {
             name = "search_traces",
             description = "서비스, 시간 범위 등으로 트레이스를 검색합니다. 느린 요청이나 에러가 발생한 트레이스를 찾을 수 있습니다."
         ) { request ->
+            val args = request.arguments ?: emptyMap()
+            val env = parseEnvironment(args)
+            val tempo = getTempo(adapters, env)
+
             if (tempo == null) {
-                return@addTool tempoNotConfiguredResult
+                return@addTool tempoNotConfiguredResult(env)
             }
 
-            val args = request.arguments ?: emptyMap()
             val traces = tempo.searchTraces(
                 service = args["service"] as? String,
                 sinceMinutes = (args["since_minutes"] as? Number)?.toInt() ?: 60,
@@ -218,22 +265,26 @@ object ToolRegistry {
                 maxDuration = args["max_duration"] as? String,
                 limit = (args["limit"] as? Number)?.toInt() ?: 20
             )
-            CallToolResult(content = listOf(TextContent(TraceFormatter.formatList(traces))))
+            CallToolResult(content = listOf(TextContent("${env.emoji} 환경\n\n${TraceFormatter.formatList(traces)}")))
         }
 
         // 9. test_tempo_connection
         server.addTool(
             name = "test_tempo_connection",
             description = "Tempo 서버 연결을 테스트합니다."
-        ) { _ ->
+        ) { request ->
+            val args = request.arguments ?: emptyMap()
+            val env = parseEnvironment(args)
+            val tempo = getTempo(adapters, env)
+
             if (tempo == null) {
-                return@addTool tempoNotConfiguredResult
+                return@addTool tempoNotConfiguredResult(env)
             }
 
             val result = tempo.testConnection()
             val text = result.fold(
-                onSuccess = { "✅ $it" },
-                onFailure = { "❌ Tempo 연결 실패: ${it.message}" }
+                onSuccess = { "${env.emoji} 환경: ✅ $it" },
+                onFailure = { "${env.emoji} 환경: ❌ Tempo 연결 실패: ${it.message}" }
             )
             CallToolResult(content = listOf(TextContent(text)))
         }

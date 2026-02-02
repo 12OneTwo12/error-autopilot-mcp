@@ -13,8 +13,8 @@ import kotlinx.coroutines.runBlocking
  * 실행: ./gradlew run -PmainClass=io.github.onetwo.errorautopilot.TestConnectionKt
  */
 fun main() = runBlocking {
-    val lokiUrl = System.getenv("LOKI_URL") ?: "https://metrics.bootalk.co.kr"
-    val tempoUrl = System.getenv("TEMPO_URL") ?: "https://metrics.bootalk.co.kr/tempo"
+    val lokiUrl = System.getenv("LOKI_URL") ?: "https://monitoring.upvy.org"
+    val tempoUrl = System.getenv("TEMPO_URL") ?: "https://monitoring.upvy.org/tempo"
 
     println("=" .repeat(60))
     println("Error Autopilot MCP - Connection Test (Kotlin)")

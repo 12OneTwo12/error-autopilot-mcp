@@ -134,35 +134,57 @@ class LokiAdapter(private val config: LokiConfig) : Closeable {
     /**
      * 조회 옵션을 기반으로 LogQL 쿼리 문자열을 생성합니다.
      *
+     * deployment_environment는 인덱싱된 레이블로 빠른 검색이 가능합니다.
+     * level은 structured metadata이므로 파이프라인 필터로 처리합니다.
+     * 예: {deployment_environment="dev"} | level=~"error|ERROR"
+     *
      * @param options 조회 옵션
      * @return 생성된 LogQL 쿼리 문자열
      */
     private fun buildQuery(options: FetchErrorsOptions): String {
-        val selectors = mutableListOf<String>()
+        val labelMatchers = mutableListOf<String>()
+        val pipelineFilters = mutableListOf<String>()
+
+        // 환경 필터 (인덱싱된 레이블 - 빠른 검색)
+        config.environment?.let {
+            labelMatchers.add("deployment_environment=\"${it.label}\"")
+        }
 
         // 서비스 필터
         if (options.service != null) {
-            selectors.add("service_name=\"${options.service}\"")
-        } else {
-            selectors.add("service_name=~\".+\"")
+            labelMatchers.add("service_name=\"${options.service}\"")
         }
 
         // 네임스페이스 필터
         options.namespace?.let {
-            selectors.add("namespace=\"$it\"")
+            labelMatchers.add("k8s_namespace_name=\"$it\"")
         }
 
-        val selector = selectors.joinToString(", ", "{", "}")
+        // 최소한 하나의 label matcher가 필요함 (environment가 없는 경우 fallback)
+        if (labelMatchers.isEmpty()) {
+            labelMatchers.add("service_name=~\".+\"")
+        }
 
-        // 심각도 필터 (case-insensitive 정규식)
-        val severityFilter = if (options.severity.isNotEmpty()) {
-            val patterns = options.severity.joinToString("|") { it.name.lowercase() }
-            " |~ \"(?i)($patterns)\""
+        // severity 필터 (structured metadata - 파이프라인에서 처리)
+        // level은 소문자/대문자 모두 매칭
+        if (options.severity.isNotEmpty()) {
+            val severityPattern = options.severity
+                .flatMap { listOf(it.name.lowercase(), it.name.uppercase()) }
+                .joinToString("|")
+            pipelineFilters.add("level=~\"$severityPattern\"")
+        } else {
+            // 기본: error, critical 레벨
+            pipelineFilters.add("level=~\"error|ERROR|critical|CRITICAL\"")
+        }
+
+        val labelSelector = labelMatchers.joinToString(", ", "{", "}")
+        val pipeline = if (pipelineFilters.isNotEmpty()) {
+            " | ${pipelineFilters.joinToString(" | ")}"
         } else {
             ""
         }
 
-        return "$selector$severityFilter"
+        return "$labelSelector$pipeline"
     }
 
     /**
@@ -198,21 +220,31 @@ class LokiAdapter(private val config: LokiConfig) : Closeable {
     /**
      * 메시지와 라벨에서 심각도를 감지합니다.
      *
-     * 라벨의 level/severity 값과 메시지 내용을 분석하여 심각도를 결정합니다.
+     * level structured metadata를 우선 사용하고, 없으면 severity_text 레이블을 확인합니다.
      *
      * @param message 로그 메시지
      * @param labels 라벨 맵
      * @return 감지된 [Severity]
      */
     private fun detectSeverity(message: String, labels: Map<String, String>): Severity {
-        val levelLabel = labels["level"] ?: labels["severity"] ?: ""
-        val combined = "$levelLabel $message".lowercase()
+        // level structured metadata 우선, 그 다음 severity_text 레이블
+        val levelLabel = labels["level"] ?: labels["severity_text"] ?: labels["severity"] ?: ""
 
-        return when {
-            "critical" in combined || "fatal" in combined -> Severity.CRITICAL
-            "error" in combined || "exception" in combined -> Severity.ERROR
-            "warn" in combined -> Severity.WARNING
-            else -> Severity.INFO
+        return when (levelLabel.lowercase()) {
+            "critical", "fatal" -> Severity.CRITICAL
+            "error", "err" -> Severity.ERROR
+            "warning", "warn" -> Severity.WARNING
+            "info" -> Severity.INFO
+            else -> {
+                // 레이블에서 찾지 못하면 메시지에서 추출
+                val combined = "$levelLabel $message".lowercase()
+                when {
+                    "critical" in combined || "fatal" in combined -> Severity.CRITICAL
+                    "error" in combined || "exception" in combined -> Severity.ERROR
+                    "warn" in combined -> Severity.WARNING
+                    else -> Severity.INFO
+                }
+            }
         }
     }
 

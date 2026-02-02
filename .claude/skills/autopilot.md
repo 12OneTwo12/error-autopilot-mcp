@@ -4,11 +4,15 @@
 
 ## 사용법
 ```
-/autopilot                    # 최근 1시간 에러 분석
-/autopilot 30                 # 최근 30분 에러 분석
-/autopilot upvy-backend       # 특정 서비스만 분석
-/autopilot upvy-backend 120   # 특정 서비스, 최근 2시간
+/autopilot                         # 개발 환경, 최근 1시간 에러 분석
+/autopilot prod                    # 운영 환경, 최근 1시간 에러 분석
+/autopilot 30                      # 최근 30분 에러 분석
+/autopilot upvy-backend            # 특정 서비스만 분석
+/autopilot upvy-backend 120        # 특정 서비스, 최근 2시간
+/autopilot prod upvy-backend 120   # 운영 환경, 특정 서비스, 최근 2시간
 ```
+
+**환경 옵션**: `dev` (기본), `prod`
 
 ## 워크플로우
 
@@ -16,6 +20,7 @@
 
 ### 1단계: 에러 수집
 - `fetch_errors` 도구로 에러 로그 조회
+- `env` 파라미터로 환경 지정 (dev/prod, 기본: dev)
 - 인자가 있으면 해당 서비스/시간으로 필터링
 - 에러가 없으면 "최근 에러가 없습니다" 출력하고 종료
 

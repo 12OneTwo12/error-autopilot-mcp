@@ -110,30 +110,67 @@ class ConfigModelsTest {
         }
     }
 
-    // ==================== AppConfig Tests ====================
+    // ==================== Environment Tests ====================
 
     @Test
-    fun `AppConfig hasTempoIntegration should check tempo presence`() {
-        val withTempo = AppConfig(
+    fun `Environment fromString should parse valid values`() {
+        assertEquals(Environment.DEV, Environment.fromString("dev"))
+        assertEquals(Environment.DEV, Environment.fromString("DEV"))
+        assertEquals(Environment.PROD, Environment.fromString("prod"))
+        assertEquals(Environment.PROD, Environment.fromString("production"))
+        assertEquals(Environment.DEV, Environment.fromString(null))
+        assertEquals(Environment.DEV, Environment.fromString("unknown"))
+    }
+
+    @Test
+    fun `Environment should have correct labels and emoji`() {
+        assertEquals("dev", Environment.DEV.label)
+        assertEquals("🟢 개발", Environment.DEV.emoji)
+        assertEquals("prod", Environment.PROD.label)
+        assertEquals("🔴 운영", Environment.PROD.emoji)
+    }
+
+    // ==================== EnvironmentConfig Tests ====================
+
+    @Test
+    fun `EnvironmentConfig should hold loki and tempo config`() {
+        val envConfig = EnvironmentConfig(
             loki = LokiConfig(url = "http://localhost:3100"),
             tempo = TempoConfig(url = "http://localhost:3200")
         )
-        val withoutTempo = AppConfig(
-            loki = LokiConfig(url = "http://localhost:3100")
+        assertEquals("http://localhost:3100", envConfig.loki.url)
+        assertEquals("http://localhost:3200", envConfig.tempo?.url)
+    }
+
+    // ==================== AppConfig Tests ====================
+
+    @Test
+    fun `AppConfig forEnvironment should return correct config`() {
+        val devLoki = LokiConfig(url = "http://dev-loki:3100", environment = Environment.DEV)
+        val prodLoki = LokiConfig(url = "http://prod-loki:3100", environment = Environment.PROD)
+
+        val config = AppConfig(
+            dev = EnvironmentConfig(loki = devLoki),
+            prod = EnvironmentConfig(loki = prodLoki)
         )
 
-        assertTrue(withTempo.hasTempoIntegration())
-        assertFalse(withoutTempo.hasTempoIntegration())
+        assertEquals("http://dev-loki:3100", config.forEnvironment(Environment.DEV).loki.url)
+        assertEquals("http://prod-loki:3100", config.forEnvironment(Environment.PROD).loki.url)
     }
 
     @Test
     fun `AppConfig hasGithubIntegration should check github presence`() {
+        val devConfig = EnvironmentConfig(loki = LokiConfig(url = "http://localhost:3100"))
+        val prodConfig = EnvironmentConfig(loki = LokiConfig(url = "http://localhost:3100"))
+
         val withGithub = AppConfig(
-            loki = LokiConfig(url = "http://localhost:3100"),
+            dev = devConfig,
+            prod = prodConfig,
             github = GithubConfig(owner = "owner", repo = "repo")
         )
         val withoutGithub = AppConfig(
-            loki = LokiConfig(url = "http://localhost:3100")
+            dev = devConfig,
+            prod = prodConfig
         )
 
         assertTrue(withGithub.hasGithubIntegration())

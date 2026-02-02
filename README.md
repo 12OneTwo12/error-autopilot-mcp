@@ -11,6 +11,7 @@ Loki/Tempo에서 에러를 자동으로 수집하고, **GitHub API를 통해 코
 - 📝 **GitHub 이슈 자동 생성**: 분석된 에러를 이슈로 변환
 - 🌐 **GitHub API 코드 분석**: 로컬 파일 없이 원격 저장소 코드 분석
 - 📋 **이슈 템플릿 관리**: GitHub 이슈 템플릿 가져오기 및 렌더링
+- 🌍 **환경 분리 (dev/prod)**: 개발/운영 환경 별도 조회 지원
 
 ## Quick Start
 
@@ -41,8 +42,10 @@ cd error-autopilot-mcp-kotlin
       "command": "java",
       "args": ["-jar", "/path/to/error-autopilot-mcp-kotlin/build/libs/error-autopilot-mcp-1.0.0.jar"],
       "env": {
-        "LOKI_URL": "https://your-loki-server",
-        "TEMPO_URL": "https://your-tempo-server"
+        "LOKI_URL_DEV": "https://dev-loki.example.com",
+        "TEMPO_URL_DEV": "https://dev-tempo.example.com",
+        "LOKI_URL_PROD": "https://prod-loki.example.com",
+        "TEMPO_URL_PROD": "https://prod-tempo.example.com"
       }
     }
   }
@@ -51,20 +54,35 @@ cd error-autopilot-mcp-kotlin
 
 ## 환경변수
 
-| 변수 | 설명 | 필수 |
-|------|------|------|
-| `LOKI_URL` | Loki 서버 URL | ✅ |
-| `LOKI_ORG_ID` | Loki 조직 ID | - |
-| `TEMPO_URL` | Tempo 서버 URL | - |
-| `TEMPO_ORG_ID` | Tempo 조직 ID | - |
+모든 Loki/Tempo 도구는 `env` 파라미터를 지원합니다 (dev/prod, 기본: dev)
+
+### 개발 환경 (DEV)
+| 변수 | 설명 | 기본값 |
+|------|------|--------|
+| `LOKI_URL_DEV` | 개발 Loki 서버 URL | http://localhost:3100 |
+| `TEMPO_URL_DEV` | 개발 Tempo 서버 URL | http://localhost:3200 |
+
+### 운영 환경 (PROD)
+| 변수 | 설명 | 기본값 |
+|------|------|--------|
+| `LOKI_URL_PROD` | 운영 Loki 서버 URL | http://localhost:3100 |
+| `TEMPO_URL_PROD` | 운영 Tempo 서버 URL | http://localhost:3200 |
+
+### 공통
+| 변수 | 설명 | 기본값 |
+|------|------|--------|
+| `LOKI_ORG_ID` | Loki 조직 ID | default |
+| `TEMPO_ORG_ID` | Tempo 조직 ID | default |
 
 ## MCP 도구
+
+> **Note**: 모든 Loki/Tempo 도구는 `env` 파라미터를 지원합니다. `"dev"` (기본) 또는 `"prod"`를 지정하세요.
 
 ### Loki 로그 도구
 
 | 도구 | 설명 |
 |------|------|
-| `fetch_errors` | Loki에서 에러 로그 조회 (severity, service 필터링) |
+| `fetch_errors` | Loki에서 에러 로그 조회 (env, severity, service 필터링) |
 | `query_logs` | 커스텀 LogQL 쿼리 실행 |
 | `list_services` | 사용 가능한 서비스 목록 조회 |
 | `list_labels` | Loki 레이블 목록 조회 |
@@ -78,6 +96,17 @@ cd error-autopilot-mcp-kotlin
 | `get_trace` | trace_id로 분산 트레이스 조회 |
 | `search_traces` | 서비스, 시간, 지속시간으로 트레이스 검색 |
 | `test_tempo_connection` | Tempo 연결 테스트 |
+
+### 쿼리 최적화
+
+`fetch_errors`는 다음과 같은 최적화된 LogQL 쿼리를 생성합니다:
+- `deployment_environment`: 인덱싱된 레이블로 빠른 환경 필터링
+- `level`: structured metadata로 심각도 필터링 (대소문자 모두 매칭)
+
+예시:
+```logql
+{deployment_environment="dev"} | level=~"error|ERROR|critical|CRITICAL"
+```
 
 ### 이슈 템플릿 도구
 

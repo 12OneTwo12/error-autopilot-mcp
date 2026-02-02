@@ -17,12 +17,12 @@ import kotlin.test.assertTrue
 class ConnectionTest {
 
     private val lokiConfig = LokiConfig(
-        url = System.getenv("LOKI_URL") ?: "https://metrics.bootalk.co.kr",
+        url = System.getenv("LOKI_URL") ?: "https://monitoring.upvy.org",
         orgId = System.getenv("LOKI_ORG_ID") ?: "default"
     )
 
     private val tempoConfig = TempoConfig(
-        url = System.getenv("TEMPO_URL") ?: "https://metrics.bootalk.co.kr/tempo",
+        url = System.getenv("TEMPO_URL") ?: "https://monitoring.upvy.org/tempo",
         orgId = System.getenv("TEMPO_ORG_ID") ?: "default"
     )
 
