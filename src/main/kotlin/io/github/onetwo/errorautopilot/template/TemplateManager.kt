@@ -16,16 +16,6 @@ private val logger = KotlinLogging.logger {}
  * 템플릿 설정은 JSON 파일로 영속화됩니다.
  *
  * @param configPath 설정 파일 경로 (기본: ~/.config/error-autopilot/templates.json)
- *
- * @sample
- * ```kotlin
- * val manager = TemplateManager()
- * val rendered = manager.renderTemplate(null, mapOf(
- *     "timestamp" to "2024-01-01 12:00:00",
- *     "service" to "api-server",
- *     "error_message" to "NullPointerException"
- * ))
- * ```
  */
 class TemplateManager(
     configPath: String? = null
@@ -240,16 +230,6 @@ class TemplateManager(
      * @param templateId 사용할 템플릿 ID (null이면 기본 템플릿 사용)
      * @param variables 치환할 변수 맵 (키: 변수명, 값: 치환값)
      * @return 렌더링된 이슈 내용
-     *
-     * @sample
-     * ```kotlin
-     * val rendered = manager.renderTemplate("error_autopilot", mapOf(
-     *     "timestamp" to "2024-01-01 12:00:00",
-     *     "service" to "api-server",
-     *     "severity" to "ERROR",
-     *     "error_message" to "Connection refused"
-     * ))
-     * ```
      */
     fun renderTemplate(
         templateId: String?,

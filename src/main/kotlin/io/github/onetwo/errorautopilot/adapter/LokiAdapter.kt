@@ -17,20 +17,13 @@ import java.time.Instant
 private val logger = KotlinLogging.logger {}
 
 /**
- * Loki 서버와 통신하여 로그 데이터를 조회하는 어댑터 클래스.
+ * Loki 서버와 통신하여 로그 데이터를 조회하는 어댑터.
  *
- * Loki API를 사용하여 에러 로그를 검색하고, 결과를 [UnifiedError] 형식으로 변환합니다.
- * 이 어댑터는 [Closeable]을 구현하여 리소스 해제를 보장합니다.
+ * Loki API를 통해 에러 로그를 검색하고, [UnifiedError] 형식으로 변환합니다.
+ * [Closeable]을 구현하므로 사용 후 반드시 close()를 호출해야 합니다.
  *
  * @property config Loki 서버 연결 설정
  * @see [Loki HTTP API](https://grafana.com/docs/loki/latest/reference/loki-http-api/)
- *
- * @sample
- * ```kotlin
- * val adapter = LokiAdapter(LokiConfig(url = "http://localhost:3100"))
- * val errors = adapter.fetchErrors(FetchErrorsOptions(sinceMinutes = 60))
- * adapter.close()
- * ```
  */
 class LokiAdapter(private val config: LokiConfig) : Closeable {
 
@@ -109,15 +102,6 @@ class LokiAdapter(private val config: LokiConfig) : Closeable {
      * @param sinceMinutes 현재 시간으로부터의 조회 범위 (분)
      * @param limit 최대 조회 개수
      * @return 변환된 [UnifiedError] 목록 (타임스탬프 내림차순 정렬)
-     *
-     * @sample
-     * ```kotlin
-     * val errors = adapter.query(
-     *     logQL = "{service_name=\"api-server\"} |= \"error\"",
-     *     sinceMinutes = 30,
-     *     limit = 50
-     * )
-     * ```
      */
     suspend fun query(logQL: String, sinceMinutes: Int, limit: Int): List<UnifiedError> {
         val now = Instant.now()

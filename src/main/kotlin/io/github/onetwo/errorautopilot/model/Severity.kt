@@ -25,13 +25,6 @@ enum class Severity {
          *
          * @param value 변환할 문자열 (예: "error", "ERROR", "Error")
          * @return 매핑된 [Severity] 또는 유효하지 않은 경우 null
-         *
-         * @sample
-         * ```kotlin
-         * Severity.fromString("error")    // Severity.ERROR
-         * Severity.fromString("CRITICAL") // Severity.CRITICAL
-         * Severity.fromString("unknown")  // null
-         * ```
          */
         fun fromString(value: String): Severity? = try {
             valueOf(value.uppercase())

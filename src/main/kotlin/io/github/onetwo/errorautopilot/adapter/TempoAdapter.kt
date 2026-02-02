@@ -16,21 +16,13 @@ import java.time.Instant
 private val logger = KotlinLogging.logger {}
 
 /**
- * Tempo 서버와 통신하여 분산 트레이스 데이터를 조회하는 어댑터 클래스.
+ * Tempo 서버와 통신하여 분산 트레이스 데이터를 조회하는 어댑터.
  *
- * Tempo API를 사용하여 Trace ID로 개별 트레이스를 조회하거나,
- * 조건에 맞는 트레이스를 검색합니다.
- * 이 어댑터는 [Closeable]을 구현하여 리소스 해제를 보장합니다.
+ * Tempo API를 통해 Trace ID로 개별 트레이스를 조회하거나 조건에 맞는 트레이스를 검색합니다.
+ * [Closeable]을 구현하므로 사용 후 반드시 close()를 호출해야 합니다.
  *
  * @property config Tempo 서버 연결 설정
  * @see [Tempo HTTP API](https://grafana.com/docs/tempo/latest/api_docs/)
- *
- * @sample
- * ```kotlin
- * val adapter = TempoAdapter(TempoConfig(url = "http://localhost:3200"))
- * val trace = adapter.getTrace("abc123def456...")
- * adapter.close()
- * ```
  */
 class TempoAdapter(private val config: TempoConfig) : Closeable {
 
@@ -93,16 +85,6 @@ class TempoAdapter(private val config: TempoConfig) : Closeable {
      * @param maxDuration 최대 지속 시간 필터 (예: "10s")
      * @param limit 최대 조회 개수 (기본: 20)
      * @return 검색된 [TraceData] 목록
-     *
-     * @sample
-     * ```kotlin
-     * // 느린 요청 찾기 (1초 이상)
-     * val slowTraces = adapter.searchTraces(
-     *     service = "api-server",
-     *     minDuration = "1s",
-     *     limit = 10
-     * )
-     * ```
      */
     suspend fun searchTraces(
         service: String? = null,

@@ -9,13 +9,6 @@ import io.github.onetwo.errorautopilot.model.UnifiedError
  *
  * [UnifiedError] 목록을 Markdown 형식의 문자열로 변환하며,
  * 에러 요약 정보도 생성합니다.
- *
- * @sample
- * ```kotlin
- * val errors = listOf(error1, error2)
- * val formatted = ErrorFormatter.format(errors)
- * val summary = ErrorFormatter.generateSummary(errors)
- * ```
  */
 object ErrorFormatter {
 
@@ -113,12 +106,6 @@ object ErrorFormatter {
  *
  * [TraceData]를 Markdown 형식의 문자열로 변환하며,
  * 개별 트레이스 상세 정보와 목록 형식 모두 지원합니다.
- *
- * @sample
- * ```kotlin
- * val trace = tempoAdapter.getTrace("abc123...")
- * val formatted = TraceFormatter.format(trace!!)
- * ```
  */
 object TraceFormatter {
 
