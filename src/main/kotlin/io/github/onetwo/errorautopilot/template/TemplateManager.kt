@@ -315,82 +315,82 @@ class TemplateManager(
                 titlePrefix = "[BUG]",
                 labels = listOf("bug"),
                 body = """### 문제 사항 요약 및 배경
-{{error_summary}}
-
----
-
-### 버그 상세
-
-#### 버그 상황
-{{error_detail}}
-
-#### 재현 방법
-{{reproduction}}
-
-#### 기대 동작
-{{expected_behavior}}
-
-#### 버그 발생환경
-{{environment}}
-
-#### 스크린샷
-{{screenshots}}
-
----
-
-### 참고 사항
-{{notes}}
-
----
-
-### 관련 문서
-{{related_docs}}
-
----
-_이 이슈는 Error Autopilot에 의해 자동 생성되었습니다._"""
-            ),
-            "error_autopilot" to IssueTemplate(
-                name = "Error Autopilot",
-                titlePrefix = "[ERROR]",
-                labels = listOf("bug", "auto-generated"),
-                body = """## 🔴 에러 요약
-- **발생 시간**: {{timestamp}}
-- **서비스**: {{service}}
-- **심각도**: {{severity}}
-- **Pod**: {{pod}}
-
-## 📋 에러 상세
-```
-{{error_message}}
-```
-
-{{#if stack_trace}}
-<details>
-<summary>스택 트레이스</summary>
-
-```
-{{stack_trace}}
-```
-</details>
-{{/if}}
-
-## 🔍 근본 원인 분석
-{{root_cause}}
-
-## 📁 영향받는 파일
-{{#each affected_files}}
-- `{{this}}`
-{{/each}}
-
-## 💡 제안된 수정
-{{suggested_fix}}
-
-## 🔗 관련 정보
-- Trace ID: `{{trace_id}}`
-- Grafana: [View Logs]({{grafana_url}})
-
----
-_이 이슈는 Error Autopilot에 의해 자동 생성되었습니다._"""
+                        {{error_summary}}
+                        
+                        ---
+                        
+                        ### 버그 상세
+                        
+                        #### 버그 상황
+                        {{error_detail}}
+                        
+                        #### 재현 방법
+                        {{reproduction}}
+                        
+                        #### 기대 동작
+                        {{expected_behavior}}
+                        
+                        #### 버그 발생환경
+                        {{environment}}
+                        
+                        #### 스크린샷
+                        {{screenshots}}
+                        
+                        ---
+                        
+                        ### 참고 사항
+                        {{notes}}
+                        
+                        ---
+                        
+                        ### 관련 문서
+                        {{related_docs}}
+                        
+                        ---
+                        _이 이슈는 Error Autopilot에 의해 자동 생성되었습니다._"""
+                                    ),
+                                    "error_autopilot" to IssueTemplate(
+                                        name = "Error Autopilot",
+                                        titlePrefix = "[ERROR]",
+                                        labels = listOf("bug", "auto-generated"),
+                                        body = """## 🔴 에러 요약
+                        - **발생 시간**: {{timestamp}}
+                        - **서비스**: {{service}}
+                        - **심각도**: {{severity}}
+                        - **Pod**: {{pod}}
+                        
+                        ## 📋 에러 상세
+                        ```
+                        {{error_message}}
+                        ```
+                        
+                        {{#if stack_trace}}
+                        <details>
+                        <summary>스택 트레이스</summary>
+                        
+                        ```
+                        {{stack_trace}}
+                        ```
+                        </details>
+                        {{/if}}
+                        
+                        ## 🔍 근본 원인 분석
+                        {{root_cause}}
+                        
+                        ## 📁 영향받는 파일
+                        {{#each affected_files}}
+                        - `{{this}}`
+                        {{/each}}
+                        
+                        ## 💡 제안된 수정
+                        {{suggested_fix}}
+                        
+                        ## 🔗 관련 정보
+                        - Trace ID: `{{trace_id}}`
+                        - Grafana: [View Logs]({{grafana_url}})
+                        
+                        ---
+                        _이 이슈는 Error Autopilot에 의해 자동 생성되었습니다._"""
             )
         )
     }

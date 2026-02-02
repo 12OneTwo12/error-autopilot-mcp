@@ -46,7 +46,7 @@ tasks.test {
 }
 
 kotlin {
-    jvmToolchain(21)
+    jvmToolchain(17)
 }
 
 tasks.jar {
@@ -57,4 +57,12 @@ tasks.jar {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
     from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) })
+}
+
+// 연결 테스트용 태스크
+tasks.register<JavaExec>("testConnection") {
+    group = "verification"
+    description = "Test connection to Loki and Tempo servers"
+    mainClass.set("io.github.onetwo.errorautopilot.TestConnectionKt")
+    classpath = sourceSets["main"].runtimeClasspath
 }
