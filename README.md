@@ -15,9 +15,10 @@ Loki/Tempo에서 에러를 자동으로 수집하고, **GitHub API를 통해 코
 
 ## Action Screen
 
-|                       Triger                        |                        Action                        |                        Result                        |  
-| :----------------------------------------------------------: | :----------------------------------------------------------: | :----------------------------------------------------------: | 
-| ![](https://github.com/user-attachments/assets/99f4c410-70b6-4e03-8ef8-1bca025e2049) | ![](https://github.com/user-attachments/assets/b46760a5-f8e9-4967-9665-4b591325b9bb) | ![](https://github.com/user-attachments/assets/e95a5460-ea5a-498b-88a2-ae197e3ff621) |
+|                       Triger                        |                        Action                        |                        Result                        | Created ISSUE |
+| :----------------------------------------------------------: | :----------------------------------------------------------: | :----------------------------------------------------------: | :----------------------------------------------------------: | 
+| ![](https://github.com/user-attachments/assets/99f4c410-70b6-4e03-8ef8-1bca025e2049) | ![](https://github.com/user-attachments/assets/b46760a5-f8e9-4967-9665-4b591325b9bb) | ![](https://github.com/user-attachments/assets/e95a5460-ea5a-498b-88a2-ae197e3ff621) | ![](https://github.com/user-attachments/assets/befff3df-fe3b-495d-aff3-f284afc38c67)
+ |
 
 
 ## Quick Start
